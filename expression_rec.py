@@ -48,6 +48,8 @@ def main():
                 print "got {} percent correct".format(correct)
                 metascore.append(correct)
             print "Mean score: {} percent correct".format(np.mean(metascore))
+            '''saving the model obtained'''
+            fishface.save('fishface_emotion_detect_model.xml')
     #begin webcam capture
     image_capture()
 
@@ -155,7 +157,6 @@ def train_svm():
 #fisher faces implementation http://www.paulvangent.com/2016/04/01/emotion-recognition-with-python-opencv-and-a-face-dataset/
 def get_files(emotion):
     files = glob.glob("dataset/%s/*" %emotion)
-    print "files: ", files
     random.shuffle(files)
     training = files[:int(len(files)*0.8)]
     prediction = files[-int(len(files)*0.2):]
