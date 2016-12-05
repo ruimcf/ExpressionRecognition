@@ -34,13 +34,13 @@ class SVM(StatModel):
 
 #main----------
 def main():
-    print len(sys.argv)
+    chosen_method = 0
     if(len(sys.argv) > 1):
         #debugging face extration in the dataset and dataset creation
         if(sys.argv[1] == "1"):
             for emotion in emotions:
                 check_faces(emotion);
-        #Run fisher faces
+        #Run fisher faces trainer
         elif(sys.argv[1] == "2"):
             metascore = []
             for i in range(0,10):
@@ -50,14 +50,16 @@ def main():
             print "Mean score: {} percent correct".format(np.mean(metascore))
             '''saving the model obtained'''
             fishface.save('fishface_emotion_detect_model.xml')
-    #begin webcam capture
-    image_capture()
+            chosen_method = 1
+        elif(sys.argv[1] == "3"):
+            fishface.load('fishface_emotion_detect_model.xml')
+            chosen_method = 1
 
-def image_capture():
-    cascPath = "haarcascade_frontalface_default.xml"
+    #begin webcam capture
+    image_capture(chosen_method)
+
+def image_capture(chosen_method):
     predictor_path = "shape_predictor_68_face_landmarks.dat"
-    #Face detector
-    faceCascade = cv2.CascadeClassifier(cascPath)
 
     video_capture = cv2.VideoCapture(0)
 
@@ -77,6 +79,12 @@ def image_capture():
 
         #Draw a rectangle around the faces
         for face in faces:
+            if(chosen_method == 1):
+                cutted_face = frame[dlib.rectangle.top(face):dlib.rectangle.top(face)+dlib.rectangle.height(face), dlib.rectangle.left(face):dlib.rectangle.left(face)+dlib.rectangle.width(face)]
+                normalized_face = cv2.cvtColor(cutted_face, cv2.COLOR_BGR2GRAY)
+                normalized_face = cv2.resize(normalized_face, (350, 350))
+                prediction = fishface.predict(normalized_face)
+                print emotions[prediction[0]]
             #print face, dlib.rectangle.bottom(face),dlib.rectangle.top(face),dlib.rectangle.left(face),dlib.rectangle.right(face),dlib.rectangle.height(face),dlib.rectangle.width(face)
             shape = predictor(frame, face)
             #cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
@@ -109,8 +117,9 @@ def image_capture():
         #cv2.imshow('Video', frame)
 
         #Press q to quit
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            print("pressed q")
+        key = cv2.waitKey(5)
+        if key == 27:
+            print("pressed escape")
             break
     win.close()
     video_capture.release()
