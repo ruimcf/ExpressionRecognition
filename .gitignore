@@ -93,5 +93,5 @@ source_emotion/*
 sorted_set/*
 dataset/*
 *~
-fishface_emotion_detect_model.xml
+*.xml
 

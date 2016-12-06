@@ -1,4 +1,5 @@
 import cv2
+import time
 import sys
 import dlib
 import glob
@@ -52,8 +53,12 @@ def main():
             fishface.save('fishface_emotion_detect_model.xml')
             chosen_method = 1
         elif(sys.argv[1] == "3"):
-            fishface.load('fishface_emotion_detect_model.xml')
+            fishface.load('emotion_detection_model.xml')
             chosen_method = 1
+        elif(sys.argv[1] == "4"):
+            train_fisher_self()
+            chosen_method = 1
+            fishface.save('fishface_self_emotion_detect_model.xml')
 
     #begin webcam capture
     image_capture(chosen_method)
@@ -210,6 +215,36 @@ def run_recognizer():
             incorrect += 1
         count +=1
     return ((100*correct)/(correct + incorrect))
+def train_fisher_self():
+    video_capture = cv2.VideoCapture(0)
+    training_data = []
+    training_labels = []
+
+    detector = dlib.get_frontal_face_detector()
+    win = dlib.image_window()
+    for(emotion) in emotions:
+        print "ACT {} !!!".format(emotion)
+        time.sleep(1)
+        for i in range(0,20):
+            print i
+            #capture frame-by-frame
+            ret, frame = video_capture.read()
+            #faces = face_detetion(frame, faceCascade)
+            faces = detector(frame, 1)
+
+            win.clear_overlay()
+            win.set_image(frame)
+
+            for face in faces:
+                cutted_face = frame[dlib.rectangle.top(face):dlib.rectangle.top(face)+dlib.rectangle.height(face), dlib.rectangle.left(face):dlib.rectangle.left(face)+dlib.rectangle.width(face)]
+                normalized_face = cv2.cvtColor(cutted_face, cv2.COLOR_BGR2GRAY)
+                normalized_face = cv2.resize(normalized_face, (350, 350))
+                training_data.append(normalized_face)
+                training_labels.append(emotions.index(emotion))
+    video_capture.release()
+    print "Training fisher face classifier"
+    print "Size of training set is: ",len(training_data)," images"
+    fishface.train(training_data, np.asarray(training_labels))
 
 
 if __name__ == "__main__":
