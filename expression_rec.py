@@ -7,7 +7,7 @@ import random
 from skimage import io
 import numpy as np
 
-emotions = ["neutral", "anger", "contempt", "disgust", "fear", "happy", "sadness", "surprise"]
+emotions = ["neutral", "happy", "sadness", "anger", "disgust", "surprise", "fear", "contempt"]
 fishface = cv2.createFisherFaceRecognizer()
 
 data = {}
@@ -37,31 +37,52 @@ class SVM(StatModel):
 def main():
     chosen_method = 0
     if(len(sys.argv) > 1):
-        #debugging face extration in the dataset and dataset creation
+
+        #debug face extration in the dataset and dataset creation
         if(sys.argv[1] == "1"):
+            print "debug face extration in the dataset and dataset creation"
+
             for emotion in emotions:
                 check_faces(emotion);
-        #Run fisher faces trainer
+
+        #Run fisher faces trainer on database
         elif(sys.argv[1] == "2"):
+            print "Run fisher faces trainer on database"
             metascore = []
             for i in range(0,10):
-                correct = run_recognizer()
+                correct , size_training = run_recognizer(len(emotions))
                 print "got {} percent correct".format(correct)
                 metascore.append(correct)
             print "Mean score: {} percent correct".format(np.mean(metascore))
             '''saving the model obtained'''
             fishface.save('fishface_emotion_detect_model.xml')
             chosen_method = 1
+
+        #load a fisherface model and run webcam
         elif(sys.argv[1] == "3"):
-            fishface.load('emotion_detection_model.xml')
+            print "load a fisherface model and run webcam"
+            if(len(sys.argv[2]) > 2):
+                fishface.load(sys.argv[2])
+            else:
+                fishface.load('emotion_detection_model.xml')
             chosen_method = 1
+
+        #self train fisherface and run webcam
         elif(sys.argv[1] == "4"):
+            print "self train fisherface and run webcam"
             train_fisher_self()
             chosen_method = 1
             fishface.save('fishface_self_emotion_detect_model.xml')
 
-    #begin webcam capture
-    image_capture(chosen_method)
+        #test with incremental number of emotions
+        elif(sys.argv[1] == "5"):
+            print "test with incremental number of emotions"
+            incremental_fisher_faces_test()
+            chosen_method = -1
+
+    if(chosen_method >= 0):
+        #begin webcam capture
+        image_capture(chosen_method)
 
 def image_capture(chosen_method):
     predictor_path = "shape_predictor_68_face_landmarks.dat"
@@ -176,28 +197,30 @@ def get_files(emotion):
     prediction = files[-int(len(files)*0.2):]
     return training, prediction
 
-def make_sets():
+def make_sets(number_emotions):
     training_data = []
     training_labels = []
     prediction_data = []
     prediction_labels = []
-    for emotion in emotions:
-        training, prediction = get_files(emotion)
+    print number_emotions
+    for emotion in range(0, number_emotions):
+        print emotions[emotion]
+        training, prediction = get_files(emotions[emotion])
         for item in training:
             image = cv2.imread(item)
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             training_data.append(gray)
-            training_labels.append(emotions.index(emotion))
+            training_labels.append(emotion)
 
         for item in prediction:
             image = cv2.imread(item)
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             prediction_data.append(gray)
-            prediction_labels.append(emotions.index(emotion))
+            prediction_labels.append(emotion)
     return training_data, training_labels, prediction_data, prediction_labels
 
-def run_recognizer():
-    training_data, training_labels, prediction_data, prediction_labels = make_sets()
+def run_recognizer(number_emotions):
+    training_data, training_labels, prediction_data, prediction_labels = make_sets(number_emotions)
 
     print "Training fisher face classifier"
     print "Size of training set is: ",len(training_data)," images"
@@ -214,18 +237,20 @@ def run_recognizer():
         else:
             incorrect += 1
         count +=1
-    return ((100*correct)/(correct + incorrect))
+    return ((100*correct)/(correct + incorrect)), len(training_data)
 def train_fisher_self():
     video_capture = cv2.VideoCapture(0)
     training_data = []
     training_labels = []
-
+    number_times = 20
+    if len(sys.argv) > 2:
+        number_times = int(sys.argv[2])
     detector = dlib.get_frontal_face_detector()
     win = dlib.image_window()
     for(emotion) in emotions:
         print "ACT {} !!!".format(emotion)
         time.sleep(1)
-        for i in range(0,20):
+        for i in range(0,number_times):
             print i
             #capture frame-by-frame
             ret, frame = video_capture.read()
@@ -236,15 +261,33 @@ def train_fisher_self():
             win.set_image(frame)
 
             for face in faces:
-                cutted_face = frame[dlib.rectangle.top(face):dlib.rectangle.top(face)+dlib.rectangle.height(face), dlib.rectangle.left(face):dlib.rectangle.left(face)+dlib.rectangle.width(face)]
-                normalized_face = cv2.cvtColor(cutted_face, cv2.COLOR_BGR2GRAY)
-                normalized_face = cv2.resize(normalized_face, (350, 350))
-                training_data.append(normalized_face)
-                training_labels.append(emotions.index(emotion))
+                try:
+                    cutted_face = frame[dlib.rectangle.top(face):dlib.rectangle.top(face)+dlib.rectangle.height(face), dlib.rectangle.left(face):dlib.rectangle.left(face)+dlib.rectangle.width(face)]
+                    normalized_face = cv2.cvtColor(cutted_face, cv2.COLOR_BGR2GRAY)
+                    normalized_face = cv2.resize(normalized_face, (350, 350))
+                    training_data.append(normalized_face)
+                    training_labels.append(emotions.index(emotion))
+                except:
+                    pass
     video_capture.release()
     print "Training fisher face classifier"
     print "Size of training set is: ",len(training_data)," images"
     fishface.train(training_data, np.asarray(training_labels))
+
+def incremental_fisher_faces_test():
+    file_object = open("incremental_fisher_tests.txt", 'w')
+    for i in range(2, len(emotions)):
+        file_object.write("Test with {} diferent emotions".format(i))
+        print "Training with ",i," emotions"
+        metascore = []
+        size_training_data = 0
+        for j in range(0,10):
+            correct, size_training_data = run_recognizer(i)
+            print "got {} percent correct".format(correct)
+            metascore.append(correct)
+        print "Mean score: {} percent correct".format(np.mean(metascore))
+        file_object.write("Mean score: {} percent correct with Training data with {} images and 10 tests".format(np.mean(metascore), size_training_data))
+
 
 
 if __name__ == "__main__":
