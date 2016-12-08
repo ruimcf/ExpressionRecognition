@@ -31,7 +31,10 @@ class SVM(StatModel):
         self.model.train_auto(samples, responses, None, None, params, 3)
 
     def predict(self, samples):
-        return np.float( [self.model.predict(s) for s in samples])
+        e = [self.model.predict(s) for s in samples]
+        print e
+        print type(e)
+        return np.float32( [self.model.predict(s) for s in samples])
 
 #main----------
 def main():
@@ -301,12 +304,11 @@ def start_svm():
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor(predictor_path)
     training_data, training_labels, prediction_data, prediction_labels = make_sets(len(emotions))
-    training_data_ = [[]]
+    training_data_ = []
     training_labels_ = []
-    prediction_data_ = [[]]
+    prediction_data_ = []
     prediction_labels_ = []
     num_train_ex = 0
-    frame_counter = 0
     for frame in training_data:
         faces = detector(frame, 1)
         #Draw a rectangle around the faces
@@ -330,19 +332,18 @@ def start_svm():
                 shape_list.append(x)
                 shape_list.append(y)
             training_data_.append(shape_list)
-            training_labels_.append(training_labels[frame_counter])
-        frame_counter+=1
+            training_labels_.append(training_labels[num_train_ex])
+        num_train_ex+=1
 
-    training_array = np.empty(shape=(len(training_data_)), dtype = np.float32)
+    training_array = np.empty(shape=(len(training_data_), 136), dtype = np.float32)
     training_labels_array = np.empty(shape=len(training_labels_), dtype = np.float32)
     for i in range(0,len(training_data_)):
-        shape_array = np.array(training_data_[i], dtype=np.float32)
+        shape_array = np.empty(shape=(136), dtype=np.float32)
+        for j in range(0,len(training_data_[i])):
+            shape_array[j] = np.float32(training_data_[i][j])
         training_array[i] = shape_array
         training_labels_array[i] = training_labels_[i]
     num_train_ex = 0
-    frame_counter = 0
-    prediction_array = np.empty(shape=(len(prediction_data),136), dtype = np.float32)
-    prediction_labels_array = np.empty(shape=len(prediction_labels), dtype = np.float32)
     for frame in prediction_data:
         faces = detector(frame, 1)
         #Draw a rectangle around the faces
@@ -351,7 +352,7 @@ def start_svm():
         for face in faces:
             shape = predictor(frame, face)
             #normalize the landmark vector
-            shape.array = np.empty(shape=(136),dtype=np.float32)
+            shape_list = []
             for i in range(0,shape.num_parts):
                 x = (shape.part(i).x - dlib.rectangle.left(face)) / float(dlib.rectangle.width(face))
                 if x<0:
@@ -363,29 +364,30 @@ def start_svm():
                     y=0
                 elif y>1:
                     y=1
-
-                shape_array[i*2]=np.float32(x)
-                shape_array[i*2+1]=np.float32(y)
-            shape_array.ravel()
-            print "tamanho {}; num_train_ex: {}".format(prediction_array.size, num_train_ex)
-            prediction_array[num_train_ex]=shape_array
-            prediction_labels_array[num_train_ex]=np.float32(int(prediction_labels[num_train_ex]))
-            num_train_ex+=1
+                shape_list.append(x)
+                shape_list.append(y)
+            prediction_data_.append(shape_list)
+            prediction_labels_.append(prediction_labels[num_train_ex])
+        num_train_ex+=1
+    prediction_array = np.empty(shape=(len(prediction_data_), 136), dtype = np.float32)
+    prediction_labels_array = np.empty(shape=len(prediction_labels_), dtype = np.float32)
+    for i in range(0,len(prediction_data_)):
+        shape_array = np.empty(shape=(136), dtype=np.float32)
+        for j in range(0,len(prediction_data_[i])):
+            shape_array[j] = np.float32(prediction_data_[i][j])
+        prediction_array[i] = shape_array.ravel()
+        prediction_labels_array[i] = prediction_labels_[i]
     print "Training SVM"
-    print training_labels_array
-    print training_array.size, training_labels_array.size
-    training_labels_array.ravel()
+    #training_labels_array.ravel()
     svm.train(training_array, training_labels_array)
-    prediction_array.ravel()
-    y_val = svm.predict(prediction_array)
+    y_val = svm.predict(training_array)
 
     print "predicting classification set"
     count = 0
     correct = 0
     incorrect = 0
     for val in y_val:
-        pred, conf = fishface.predict(image)
-        if val == prediction_labels_array[count]:
+        if val == training_labels_array[count]:
             correct += 1
         else:
             incorrect += 1
