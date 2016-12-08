@@ -27,8 +27,8 @@ class SVM(StatModel):
 
     def train(self, samples, responses):
         #setting algorithm parameters
-        params = dict( kernel_type=cv2.SVM_LINEAR, svm_type=cv2.SVM_C_SVC, C=1)
-        self.model.train(samples, responses, params = params)
+        params = dict( kernel_type=cv2.SVM_LINEAR, svm_type=cv2.SVM_C_SVC)
+        self.model.train_auto(samples, responses, None, None, params, 3)
 
     def predict(self, samples):
         return np.float( [self.model.predict(s) for s in samples])
@@ -45,7 +45,7 @@ def main():
             for emotion in emotions:
                 check_faces(emotion);
 
-        #Run fisher faces trainer on database
+        #Run fisher faces trainer on dataset
         elif(sys.argv[1] == "2"):
             print "Run fisher faces trainer on database"
             metascore = []
@@ -79,6 +79,11 @@ def main():
             print "test with incremental number of emotions"
             incremental_fisher_faces_test()
             chosen_method = -1
+
+        #Run svm on dataset
+        elif(sys.argv[1] == "11"):
+            print "Run svm on database"
+            print start_svm()
 
     if(chosen_method >= 0):
         #begin webcam capture
@@ -268,6 +273,7 @@ def train_fisher_self():
                     training_data.append(normalized_face)
                     training_labels.append(emotions.index(emotion))
                 except:
+                    print "PASSED"
                     pass
     video_capture.release()
     print "Training fisher face classifier"
@@ -277,7 +283,7 @@ def train_fisher_self():
 def incremental_fisher_faces_test():
     file_object = open("incremental_fisher_tests.txt", 'w')
     for i in range(2, len(emotions)):
-        file_object.write("Test with {} diferent emotions".format(i))
+        file_object.write("Test with {} diferent emotions\n".format(i))
         print "Training with ",i," emotions"
         metascore = []
         size_training_data = 0
@@ -286,9 +292,104 @@ def incremental_fisher_faces_test():
             print "got {} percent correct".format(correct)
             metascore.append(correct)
         print "Mean score: {} percent correct".format(np.mean(metascore))
-        file_object.write("Mean score: {} percent correct with Training data with {} images and 10 tests".format(np.mean(metascore), size_training_data))
+        file_object.write("Mean score: {} percent correct with Training data with {} images and 10 tests\n".format(np.mean(metascore), size_training_data))
 
+#SVM-------------------------------------
+def start_svm():
+    predictor_path = "shape_predictor_68_face_landmarks.dat"
+    svm = SVM()
+    detector = dlib.get_frontal_face_detector()
+    predictor = dlib.shape_predictor(predictor_path)
+    training_data, training_labels, prediction_data, prediction_labels = make_sets(len(emotions))
+    training_data_ = [[]]
+    training_labels_ = []
+    prediction_data_ = [[]]
+    prediction_labels_ = []
+    num_train_ex = 0
+    frame_counter = 0
+    for frame in training_data:
+        faces = detector(frame, 1)
+        #Draw a rectangle around the faces
+        if(len(faces) != 1):
+            print "FUCK", len(faces)
+        for face in faces:
+            shape = predictor(frame, face)
+            #normalize the landmark vector
+            shape_list = []
+            for i in range(0,shape.num_parts):
+                x = (shape.part(i).x - dlib.rectangle.left(face)) / float(dlib.rectangle.width(face))
+                if x<0:
+                    x=0
+                elif x>1:
+                    x=1
+                y = (shape.part(i).y - dlib.rectangle.top(face)) / float(dlib.rectangle.height(face))
+                if(y<0):
+                    y=0
+                elif y>1:
+                    y=1
+                shape_list.append(x)
+                shape_list.append(y)
+            training_data_.append(shape_list)
+            training_labels_.append(training_labels[frame_counter])
+        frame_counter+=1
 
+    training_array = np.empty(shape=(len(training_data_)), dtype = np.float32)
+    training_labels_array = np.empty(shape=len(training_labels_), dtype = np.float32)
+    for i in range(0,len(training_data_)):
+        shape_array = np.array(training_data_[i], dtype=np.float32)
+        training_array[i] = shape_array
+        training_labels_array[i] = training_labels_[i]
+    num_train_ex = 0
+    frame_counter = 0
+    prediction_array = np.empty(shape=(len(prediction_data),136), dtype = np.float32)
+    prediction_labels_array = np.empty(shape=len(prediction_labels), dtype = np.float32)
+    for frame in prediction_data:
+        faces = detector(frame, 1)
+        #Draw a rectangle around the faces
+        if(len(faces) != 1):
+            print "FUCK",len(faces)
+        for face in faces:
+            shape = predictor(frame, face)
+            #normalize the landmark vector
+            shape.array = np.empty(shape=(136),dtype=np.float32)
+            for i in range(0,shape.num_parts):
+                x = (shape.part(i).x - dlib.rectangle.left(face)) / float(dlib.rectangle.width(face))
+                if x<0:
+                    x=0
+                elif x>1:
+                    x=1
+                y = (shape.part(i).y - dlib.rectangle.top(face)) / float(dlib.rectangle.height(face))
+                if(y<0):
+                    y=0
+                elif y>1:
+                    y=1
 
+                shape_array[i*2]=np.float32(x)
+                shape_array[i*2+1]=np.float32(y)
+            shape_array.ravel()
+            print "tamanho {}; num_train_ex: {}".format(prediction_array.size, num_train_ex)
+            prediction_array[num_train_ex]=shape_array
+            prediction_labels_array[num_train_ex]=np.float32(int(prediction_labels[num_train_ex]))
+            num_train_ex+=1
+    print "Training SVM"
+    print training_labels_array
+    print training_array.size, training_labels_array.size
+    training_labels_array.ravel()
+    svm.train(training_array, training_labels_array)
+    prediction_array.ravel()
+    y_val = svm.predict(prediction_array)
+
+    print "predicting classification set"
+    count = 0
+    correct = 0
+    incorrect = 0
+    for val in y_val:
+        pred, conf = fishface.predict(image)
+        if val == prediction_labels_array[count]:
+            correct += 1
+        else:
+            incorrect += 1
+        count +=1
+    return ((100*correct)/(correct + incorrect))
 if __name__ == "__main__":
     main()
