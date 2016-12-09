@@ -9,9 +9,7 @@ import numpy as np
 
 emotions = ["neutral", "happy", "sadness", "anger", "disgust", "surprise", "fear", "contempt"]
 fishface = cv2.createFisherFaceRecognizer()
-
 data = {}
-
 #definition of wrapper classes http://stackoverflow.com/questions/8687885/python-opencv-svm-implementation
 class StatModel(object):
     '''parent class - starting point to add abstraction'''
@@ -31,13 +29,11 @@ class SVM(StatModel):
         self.model.train_auto(samples, responses, None, None, params, 3)
 
     def predict(self, samples):
-        e = [self.model.predict(s) for s in samples]
-        print e
-        print type(e)
         return np.float32( [self.model.predict(s) for s in samples])
 
 #main----------
 def main():
+    svm = 0
     chosen_method = 0
     if(len(sys.argv) > 1):
 
@@ -64,7 +60,7 @@ def main():
         #load a fisherface model and run webcam
         elif(sys.argv[1] == "3"):
             print "load a fisherface model and run webcam"
-            if(len(sys.argv[2]) > 2):
+            if(len(sys.argv) > 2):
                 fishface.load(sys.argv[2])
             else:
                 fishface.load('emotion_detection_model.xml')
@@ -84,15 +80,35 @@ def main():
             chosen_method = -1
 
         #Run svm on dataset
-        elif(sys.argv[1] == "11"):
+        elif(sys.argv[1] == "12"):
             print "Run svm on database"
-            print start_svm()
+            metascore = []
+            for i in range(0, 10):
+                svm, correct = start_svm()
+                print "got {} percent correct".format(correct)
+                metascore.append(correct)
+            print "Mean score: {} percent correct".format(np.mean(metascore))
+            '''saving the model obtained'''
+            print "Saving model"
+            svm.save("svm_model_dataset.xml")
+            print "Starting recognition"
+            chosen_method = 2
+
+        #Load SVM model and run webcam
+        elif(sys.argv[1] == "11"):
+            print "Load svm model and run webcam"
+            chosen_method = 2
+            if(len(sys.argv) > 2):
+                svm.load(sys.argv[2])
+            else:
+                svm.load('svm_model_dataset.xml')
+
 
     if(chosen_method >= 0):
         #begin webcam capture
-        image_capture(chosen_method)
+        image_capture(chosen_method, svm)
 
-def image_capture(chosen_method):
+def image_capture(chosen_method, svm):
     predictor_path = "shape_predictor_68_face_landmarks.dat"
 
     video_capture = cv2.VideoCapture(0)
@@ -119,29 +135,28 @@ def image_capture(chosen_method):
                 normalized_face = cv2.resize(normalized_face, (350, 350))
                 prediction = fishface.predict(normalized_face)
                 print emotions[prediction[0]]
-            #print face, dlib.rectangle.bottom(face),dlib.rectangle.top(face),dlib.rectangle.left(face),dlib.rectangle.right(face),dlib.rectangle.height(face),dlib.rectangle.width(face)
-            shape = predictor(frame, face)
-            #cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-            #normalize the landmark vector
-            normalized_shape = np.zeros(shape=(68,2))
-            for i in range(0,shape.num_parts):
-                x = (shape.part(i).x - dlib.rectangle.left(face)) / float(dlib.rectangle.width(face))
-                if x<0:
-                    x=0
-                elif x>1:
-                    x=1
-
-                y = (shape.part(i).y - dlib.rectangle.top(face)) / float(dlib.rectangle.height(face))
-                if(y<0):
-                    y=0
-                elif y>1:
-                    y=1
-
-                normalized_shape[i]=[x,y]
-
-            win.add_overlay(shape)
-
-            #print normalized_shape
+            elif(chosen_method == 2):
+                prediction_array = np.empty(shape=(1,136),dtype=np.float32)
+                shape = predictor(frame, face)
+                #normalize the landmark vector
+                shape_array = np.empty(shape=136)
+                for i in range(0,shape.num_parts):
+                    x = (shape.part(i).x - dlib.rectangle.left(face)) / float(dlib.rectangle.width(face))
+                    if x<0:
+                        x=0
+                    elif x>1:
+                        x=1
+                    y = (shape.part(i).y - dlib.rectangle.top(face)) / float(dlib.rectangle.height(face))
+                    if(y<0):
+                        y=0
+                    elif y>1:
+                        y=1
+                    shape_array[i*2]=np.float32(x)
+                    shape_array[i*2+1]=np.float32(y)
+                prediction_array[0] = shape_array.ravel()
+                y_val = svm.predict(prediction_array)
+                print emotions[int(y_val[0])]
+                win.add_overlay(shape)
 
 
         win.add_overlay(faces)
@@ -178,7 +193,7 @@ def check_faces(emotion):
                 cv2.imwrite("dataset/%s/%s.jpg" %(emotion, filenumber), out)
                 filenumber +=1
             except:
-                print "imagem que fudeu: ",emotion, " ", f
+                print "imagem que partiu: ",emotion, " ", f
     print "No_face: %d" %no_face
 
 
@@ -311,9 +326,6 @@ def start_svm():
     num_train_ex = 0
     for frame in training_data:
         faces = detector(frame, 1)
-        #Draw a rectangle around the faces
-        if(len(faces) != 1):
-            print "FUCK", len(faces)
         for face in faces:
             shape = predictor(frame, face)
             #normalize the landmark vector
@@ -378,9 +390,8 @@ def start_svm():
         prediction_array[i] = shape_array.ravel()
         prediction_labels_array[i] = prediction_labels_[i]
     print "Training SVM"
-    #training_labels_array.ravel()
     svm.train(training_array, training_labels_array)
-    y_val = svm.predict(training_array)
+    y_val = svm.predict(prediction_array)
 
     print "predicting classification set"
     count = 0
@@ -392,6 +403,6 @@ def start_svm():
         else:
             incorrect += 1
         count +=1
-    return ((100*correct)/(correct + incorrect))
+    return svm, ((100*correct)/(correct + incorrect))
 if __name__ == "__main__":
     main()
