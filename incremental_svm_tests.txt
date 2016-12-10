@@ -1,0 +1,12 @@
+Test with 2 diferent emotions
+Mean score: 99.8 percent correct with Training data with 0 images and 10 tests
+Test with 3 diferent emotions
+Mean score: 96.2 percent correct with Training data with 0 images and 10 tests
+Test with 4 diferent emotions
+Mean score: 95.4 percent correct with Training data with 0 images and 10 tests
+Test with 5 diferent emotions
+Mean score: 93.1 percent correct with Training data with 0 images and 10 tests
+Test with 6 diferent emotions
+Mean score: 91.1 percent correct with Training data with 0 images and 10 tests
+Test with 7 diferent emotions
+Mean score: 89.6 percent correct with Training data with 0 images and 10 tests
